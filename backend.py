@@ -92,7 +92,6 @@ class BlogWriter(TypedDict):
     image_specs: list[dict]
     final: str
 
-
 llm = ChatGoogleGenerativeAI(model='gemini-2.5-flash')
 
 
@@ -493,7 +492,6 @@ def generate_and_place_images(state: BlogWriter) -> dict:
     Path(filename).write_text(md, encoding="utf-8")
     return {"final": md}
 
-
 # building the graph
 graph = StateGraph(BlogWriter)
 
@@ -505,6 +503,7 @@ graph.add_node('worker', worker_node)
 graph.add_node('merging_content', merging_content)
 graph.add_node('decide_images', decide_images)
 graph.add_node('generate_and_place_images', generate_and_place_images)
+graph.add_node('feedback', feedback_node)
 
 graph.add_edge(START, 'router')
 graph.add_conditional_edges("router", route_next, {"research": "research", "orchestrator": "orchestrator"})
