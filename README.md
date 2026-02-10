@@ -11,12 +11,14 @@ An AI-powered blog writing agent built with **LangGraph** and **Google Gemini**.
 
 ## ✨ Features
 
-- **Intelligent Routing** - Automatically determines if web research is needed based on topic type
-- **Web Research** - Uses Tavily Search to gather up-to-date information for hybrid/open-book topics
-- **Smart Planning** - Creates structured blog outlines with sections, word targets, and content requirements
-- **Parallel Section Writing** - Worker nodes write each section concurrently for faster generation
-- **AI Image Generation** - Automatically generates relevant diagrams/images using Gemini
-- **Streamlit UI** - Interactive frontend with real-time progress tracking and downloadable outputs
+- **Intelligent Routing** — Automatically determines if web research is needed based on topic type
+- **Web Research** — Uses Tavily Search to gather up-to-date information for hybrid/open-book topics
+- **Smart Planning** — Creates structured blog outlines with sections, word targets, and content requirements
+- **Human-in-the-Loop Review** — You approve or reject the plan before any writing begins
+- **Memory & Learning** — Rejected plans and feedback are stored in SQLite so the agent doesn't repeat past mistakes
+- **Parallel Section Writing** — Worker nodes write each section concurrently for faster generation
+- **AI Image Generation** — Automatically generates relevant diagrams/images using Gemini
+- **Streamlit UI** — Interactive frontend with real-time progress tracking and downloadable outputs
 
 ---
 
@@ -28,11 +30,14 @@ graph LR
     B -->|needs_research=true| C[Research Node]
     B -->|needs_research=false| D[Orchestrator]
     C --> D
-    D --> E[Worker Nodes]
-    E --> F[Merging Content]
-    F --> G[Decide Images]
-    G --> H[Generate & Place Images]
-    H --> I[END]
+    D --> E[HITL Review]
+    E -->|approved| F[Worker Nodes]
+    E -->|rejected| J[Finish]
+    F --> G[Merging Content]
+    G --> H[Decide Images]
+    H --> I[Generate & Place Images]
+    I --> K[END]
+    J --> K
 ```
 
 ### Nodes
@@ -41,11 +46,13 @@ graph LR
 |------|-------------|
 | **Router** | Classifies topic as `closed_book`, `hybrid`, or `open_book` |
 | **Research** | Queries Tavily Search and synthesizes evidence |
-| **Orchestrator** | Creates detailed blog plan with 5-9 sections |
-| **Worker** | Writes individual sections following the plan |
+| **Orchestrator** | Creates detailed blog plan with 5–9 sections |
+| **HITL** | Human-in-the-loop review — you approve or reject the plan |
+| **Worker** | Writes individual sections following the plan (runs in parallel) |
 | **Merging** | Combines all sections into a single markdown document |
 | **Decide Images** | Plans image placeholders and generates prompts |
 | **Generate Images** | Creates images using Gemini and embeds them in markdown |
+| **Finish** | Graceful exit when a plan is rejected |
 
 ---
 
@@ -55,15 +62,17 @@ graph LR
 Blog writing agent/
 ├── backend.py              # LangGraph workflow (all nodes and state)
 ├── frontend.py             # Streamlit UI
+├── blog_planner.db         # SQLite DB for rejected plans (auto-created)
 ├── .env                    # API keys (GOOGLE_API_KEY, TAVILY_API_KEY)
 ├── .gitignore
 ├── outputs/                # Generated blog posts
 ├── images/                 # Generated images
-└── notebooks/              # Development notebooks
-    ├── 1_basic_blog_agent.ipynb
-    ├── 2_updated_blog_agent.ipynb
-    ├── 3_adding_research_node.ipynb
-    └── 4_generating_images.ipynb
+├── 1_basic_blog_agent.ipynb
+├── 2_updated_blog_agent.ipynb
+├── 3_adding_research_node.ipynb
+├── 4_generating_images.ipynb
+├── 5_added_hitl_backend.ipynb
+└── 6_added_memory.ipynb
 ```
 
 ---
@@ -144,16 +153,19 @@ Open `http://localhost:8501` in your browser.
 
 ```python
 class BlogWriter(TypedDict):
-    topic: str
-    mode: str                    # closed_book, hybrid, open_book
-    needs_research: bool
-    queries: List[str]           # search queries for research
-    evidence: List[EvidenceItem] # research results
-    plan: Optional[Plan]         # blog outline
-    sections: List[tuple]        # (section_id, markdown)
-    merged_md: str               # combined markdown
-    image_specs: list[dict]      # image generation specs
-    final: str                   # final output
+    topic: str                    # what we're writing about
+    mode: str                     # open_book, closed_book, or hybrid
+    needs_research: bool          # do we need to search the web first?
+    queries: List[str]            # search queries if research is needed
+    evidence: List[EvidenceItem]  # facts we found from web research
+    plan: Optional[Plan]          # the blog outline (None until we create it)
+    approved: bool                # did the human give the thumbs up?
+    sections: List[tuple]         # written sections collected from workers
+    merged_md: str                # all sections stitched together
+    md_with_placeholders: str     # markdown with [[IMAGE_X]] placeholders
+    image_specs: List[dict]       # specs for images we want to generate
+    final: str                    # the finished blog post
+    feedback: str                 # human feedback if they rejected the plan
 ```
 
 ---
@@ -162,10 +174,12 @@ class BlogWriter(TypedDict):
 
 The project was developed iteratively through Jupyter notebooks:
 
-1. **Basic Agent** - Simple orchestrator → worker → reducer flow
-2. **Updated Agent** - Added structured output with Pydantic
-3. **Research Node** - Integrated Tavily for web research
-4. **Image Generation** - Added Gemini image generation
+1. **Basic Agent** — Simple orchestrator → worker → reducer flow
+2. **Updated Agent** — Added structured output with Pydantic
+3. **Research Node** — Integrated Tavily for web research
+4. **Image Generation** — Added Gemini image generation
+5. **HITL Backend** — Added human-in-the-loop plan review
+6. **Memory** — Added SQLite-backed memory so the agent learns from rejected plans
 
 To explore the development process, check out the notebooks in order.
 
